@@ -1,27 +1,25 @@
 'use client'
 import type { FC } from 'react'
-import React, { useCallback } from 'react'
-import {
-  RiCollapseDiagonalLine,
-  RiExpandDiagonalLine,
-} from '@remixicon/react'
+import { RiCollapseDiagonalLine, RiExpandDiagonalLine } from '@remixicon/react'
+import * as React from 'react'
+import { useCallback } from 'react'
+import ActionButton from '@/app/components/base/action-button'
 
-type Props = {
+type Props = Readonly<{
   isExpand: boolean
   onExpandChange: (isExpand: boolean) => void
-}
+}>
 
-const ExpandBtn: FC<Props> = ({
-  isExpand,
-  onExpandChange,
-}) => {
+const ExpandBtn: FC<Props> = ({ isExpand, onExpandChange }) => {
   const handleToggle = useCallback(() => {
     onExpandChange(!isExpand)
   }, [isExpand])
 
   const Icon = isExpand ? RiCollapseDiagonalLine : RiExpandDiagonalLine
   return (
-    <Icon className='w-3.5 h-3.5 text-gray-500 cursor-pointer' onClick={handleToggle} />
+    <ActionButton onClick={handleToggle}>
+      <Icon className="size-4" />
+    </ActionButton>
   )
 }
 export default React.memo(ExpandBtn)

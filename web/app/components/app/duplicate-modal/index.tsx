@@ -1,32 +1,40 @@
 'use client'
-import React, { useState } from 'react'
+import type { AppIconType } from '@/types/app'
+import { Button } from '@langgenius/dify-ui/button'
+import { Dialog, DialogContent } from '@langgenius/dify-ui/dialog'
+import { toast } from '@langgenius/dify-ui/toast'
+import { RiCloseLine } from '@remixicon/react'
+import * as React from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import s from './style.module.css'
-import cn from '@/utils/classnames'
-import Modal from '@/app/components/base/modal'
-import Button from '@/app/components/base/button'
-import Toast from '@/app/components/base/toast'
 import AppIcon from '@/app/components/base/app-icon'
-import EmojiPicker from '@/app/components/base/emoji-picker'
-import { useProviderContext } from '@/context/provider-context'
+import Input from '@/app/components/base/input'
 import AppsFull from '@/app/components/billing/apps-full-in-dialog'
+import { useProviderContext } from '@/context/provider-context'
+import AppIconPicker from '../../base/app-icon-picker'
+
 export type DuplicateAppModalProps = {
   appName: string
+  icon_type: AppIconType | null
   icon: string
-  icon_background: string
+  icon_background?: string | null
+  icon_url?: string | null
   show: boolean
   onConfirm: (info: {
     name: string
+    icon_type: AppIconType
     icon: string
-    icon_background: string
+    icon_background?: string | null
   }) => Promise<void>
   onHide: () => void
 }
 
 const DuplicateAppModal = ({
   appName,
+  icon_type,
   icon,
   icon_background,
+  icon_url,
   show = false,
   onConfirm,
   onHide,
@@ -35,62 +43,90 @@ const DuplicateAppModal = ({
 
   const [name, setName] = React.useState(appName)
 
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [emoji, setEmoji] = useState({ icon, icon_background })
+  const [showAppIconPicker, setShowAppIconPicker] = useState(false)
+  const [appIcon, setAppIcon] = useState(
+    icon_type === 'image'
+      ? { type: 'image' as const, url: icon_url, fileId: icon }
+      : { type: 'emoji' as const, icon, background: icon_background },
+  )
 
   const { plan, enableBilling } = useProviderContext()
-  const isAppsFull = (enableBilling && plan.usage.buildApps >= plan.total.buildApps)
+  const isAppsFull = enableBilling && plan.usage.buildApps >= plan.total.buildApps
 
   const submit = () => {
     if (!name.trim()) {
-      Toast.notify({ type: 'error', message: t('explore.appCustomize.nameRequired') })
+      toast.error(t(($) => $['appCustomize.nameRequired'], { ns: 'explore' }))
       return
     }
     onConfirm({
       name,
-      ...emoji,
+      icon_type: appIcon.type,
+      icon: appIcon.type === 'emoji' ? appIcon.icon : appIcon.fileId,
+      icon_background: appIcon.type === 'emoji' ? appIcon.background : undefined,
     })
     onHide()
   }
 
   return (
     <>
-      <Modal
-        isShow={show}
-        onClose={() => { }}
-        className={cn(s.modal, '!max-w-[480px]', 'px-8')}
-      >
-        <span className={s.close} onClick={onHide} />
-        <div className={s.title}>{t('app.duplicateTitle')}</div>
-        <div className={s.content}>
-          <div className={s.subTitle}>{t('explore.appCustomize.subTitle')}</div>
-          <div className='flex items-center justify-between space-x-2'>
-            <AppIcon size='large' onClick={() => { setShowEmojiPicker(true) }} className='cursor-pointer' icon={emoji.icon} background={emoji.icon_background} />
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className='h-10 px-3 text-sm font-normal bg-gray-100 rounded-lg grow'
-            />
+      <Dialog open={show}>
+        <DialogContent className="w-full max-w-120! overflow-hidden! border-none px-8 text-left align-middle">
+          <button
+            type="button"
+            className="absolute top-4 right-4 cursor-pointer border-none bg-transparent p-2 focus-visible:ring-1 focus-visible:ring-components-input-border-active focus-visible:outline-hidden"
+            aria-label={t(($) => $['operation.close'], { ns: 'common' })}
+            onClick={onHide}
+          >
+            <RiCloseLine className="size-4 text-text-tertiary" aria-hidden="true" />
+          </button>
+          <div className="relative mt-3 mb-9 text-xl leading-7.5 font-semibold text-text-primary">
+            {t(($) => $.duplicateTitle, { ns: 'app' })}
           </div>
-          {isAppsFull && <AppsFull loc='app-duplicate-create' />}
-        </div>
-        <div className='flex flex-row-reverse'>
-          <Button disabled={isAppsFull} className='w-24 ml-2' variant='primary' onClick={submit}>{t('app.duplicate')}</Button>
-          <Button className='w-24' onClick={onHide}>{t('common.operation.cancel')}</Button>
-        </div>
-      </Modal>
-      {showEmojiPicker && <EmojiPicker
-        onSelect={(icon, icon_background) => {
-          setEmoji({ icon, icon_background })
-          setShowEmojiPicker(false)
-        }}
-        onClose={() => {
-          setEmoji({ icon, icon_background })
-          setShowEmojiPicker(false)
-        }}
-      />}
+          <div className="mb-9 system-sm-regular text-text-secondary">
+            <div className="mb-2 system-md-medium">
+              {t(($) => $['appCustomize.subTitle'], { ns: 'explore' })}
+            </div>
+            <div className="flex items-center justify-between space-x-2">
+              <AppIcon
+                size="large"
+                onClick={() => {
+                  setShowAppIconPicker(true)
+                }}
+                className="cursor-pointer"
+                iconType={appIcon.type}
+                icon={appIcon.type === 'image' ? appIcon.fileId : appIcon.icon}
+                background={appIcon.type === 'image' ? undefined : appIcon.background}
+                imageUrl={appIcon.type === 'image' ? appIcon.url : undefined}
+              />
+              <Input value={name} onChange={(e) => setName(e.target.value)} className="h-10" />
+            </div>
+            {isAppsFull && <AppsFull className="mt-4" loc="app-duplicate-create" />}
+          </div>
+          <div className="flex flex-row-reverse">
+            <Button disabled={isAppsFull} className="ml-2 w-24" variant="primary" onClick={submit}>
+              {t(($) => $.duplicate, { ns: 'app' })}
+            </Button>
+            <Button className="w-24" onClick={onHide}>
+              {t(($) => $['operation.cancel'], { ns: 'common' })}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {showAppIconPicker && (
+        <AppIconPicker
+          open={showAppIconPicker}
+          initialEmoji={
+            appIcon.type === 'emoji'
+              ? { icon: appIcon.icon, background: appIcon.background }
+              : undefined
+          }
+          onOpenChange={setShowAppIconPicker}
+          onSelect={(payload) => {
+            setAppIcon(payload)
+          }}
+        />
+      )}
     </>
-
   )
 }
 

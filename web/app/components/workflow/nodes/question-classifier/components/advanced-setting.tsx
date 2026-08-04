@@ -1,17 +1,15 @@
 'use client'
 import type { FC } from 'react'
-import React from 'react'
-import { useTranslation } from 'react-i18next'
-import {
-  RiQuestionLine,
-} from '@remixicon/react'
-import MemoryConfig from '../../_base/components/memory-config'
-import Editor from '@/app/components/workflow/nodes/_base/components/prompt/editor'
 import type { Memory, Node, NodeOutPutVar } from '@/app/components/workflow/types'
-import TooltipPlus from '@/app/components/base/tooltip-plus'
-const i18nPrefix = 'workflow.nodes.questionClassifiers'
+import * as React from 'react'
+import { useTranslation } from 'react-i18next'
+import { Infotip } from '@/app/components/base/infotip'
+import Editor from '@/app/components/workflow/nodes/_base/components/prompt/editor'
+import MemoryConfig from '../../_base/components/memory-config'
 
-type Props = {
+const i18nPrefix = 'nodes.questionClassifiers'
+
+type Props = Readonly<{
   instruction: string
   onInstructionChange: (instruction: string) => void
   hideMemorySetting: boolean
@@ -27,7 +25,7 @@ type Props = {
   }
   nodesOutputVars: NodeOutPutVar[]
   availableNodes: Node[]
-}
+}>
 
 const AdvancedSetting: FC<Props> = ({
   instruction,
@@ -48,14 +46,17 @@ const AdvancedSetting: FC<Props> = ({
     <>
       <Editor
         title={
-          <div className='flex items-center space-x-1'>
-            <span className='uppercase'>{t(`${i18nPrefix}.instruction`)}</span>
-            <TooltipPlus popupContent={
-              <div className='w-[120px]'>
-                {t(`${i18nPrefix}.instructionTip`)}
-              </div>}>
-              <RiQuestionLine className='w-3.5 h-3.5 ml-0.5 text-gray-400' />
-            </TooltipPlus>
+          <div className="flex items-center space-x-1">
+            <span className="uppercase">
+              {t(($) => $[`${i18nPrefix}.instruction`], { ns: 'workflow' })}
+            </span>
+            <Infotip
+              aria-label={t(($) => $[`${i18nPrefix}.instructionTip`], { ns: 'workflow' })}
+              className="ml-0.5 size-3.5"
+              popupClassName="w-[120px]"
+            >
+              {t(($) => $[`${i18nPrefix}.instructionTip`], { ns: 'workflow' })}
+            </Infotip>
           </div>
         }
         value={instruction}
@@ -70,7 +71,7 @@ const AdvancedSetting: FC<Props> = ({
       />
       {!hideMemorySetting && (
         <MemoryConfig
-          className='mt-4'
+          className="mt-4"
           readonly={false}
           config={{ data: memory }}
           onChange={onMemoryChange}

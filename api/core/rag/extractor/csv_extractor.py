@@ -1,6 +1,7 @@
 """Abstract interface for document loader implementations."""
+
 import csv
-from typing import Optional
+from typing import Any, override
 
 import pandas as pd
 
@@ -18,12 +19,12 @@ class CSVExtractor(BaseExtractor):
     """
 
     def __init__(
-            self,
-            file_path: str,
-            encoding: Optional[str] = None,
-            autodetect_encoding: bool = False,
-            source_column: Optional[str] = None,
-            csv_args: Optional[dict] = None,
+        self,
+        file_path: str,
+        encoding: str | None = None,
+        autodetect_encoding: bool = False,
+        source_column: str | None = None,
+        csv_args: dict[str, Any] | None = None,
     ):
         """Initialize with file path."""
         self._file_path = file_path
@@ -32,6 +33,7 @@ class CSVExtractor(BaseExtractor):
         self.source_column = source_column
         self.csv_args = csv_args or {}
 
+    @override
     def extract(self) -> list[Document]:
         """Load data into document objects."""
         docs = []
@@ -57,7 +59,7 @@ class CSVExtractor(BaseExtractor):
         docs = []
         try:
             # load csv file into pandas dataframe
-            df = pd.read_csv(csvfile, on_bad_lines='skip', **self.csv_args)
+            df = pd.read_csv(csvfile, on_bad_lines="skip", **self.csv_args)
 
             # check source column exists
             if self.source_column and self.source_column not in df.columns:
@@ -67,7 +69,7 @@ class CSVExtractor(BaseExtractor):
 
             for i, row in df.iterrows():
                 content = ";".join(f"{col.strip()}: {str(row[col]).strip()}" for col in df.columns)
-                source = row[self.source_column] if self.source_column else ''
+                source = row[self.source_column] if self.source_column else ""
                 metadata = {"source": source, "row": i}
                 doc = Document(page_content=content, metadata=metadata)
                 docs.append(doc)

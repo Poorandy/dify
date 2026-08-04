@@ -1,17 +1,11 @@
 'use client'
 import type { FC } from 'react'
-import React from 'react'
-import { useContext } from 'use-context-selector'
 import type { ThoughtItem, ToolInfoInThought } from '../type'
-import Tool from '@/app/components/base/chat/chat/thought/tool'
-import type { Emoji } from '@/app/components/tools/types'
-
-import I18n from '@/context/i18n'
-import { getLanguage } from '@/i18n/language'
+import * as React from 'react'
+import ToolDetail from '@/app/components/base/chat/chat/answer/tool-detail'
 
 export type IThoughtProps = {
   thought: ThoughtItem
-  allToolIcons: Record<string, string | Emoji>
   isFinished: boolean
 }
 
@@ -19,28 +13,16 @@ function getValue(value: string, isValueArray: boolean, index: number) {
   if (isValueArray) {
     try {
       return JSON.parse(value)[index]
-    }
-    catch (e) {
-    }
+    } catch {}
   }
   return value
 }
 
-const Thought: FC<IThoughtProps> = ({
-  thought,
-  allToolIcons,
-  isFinished,
-}) => {
-  const { locale } = useContext(I18n)
-  const language = getLanguage(locale)
-
+const Thought: FC<IThoughtProps> = ({ thought, isFinished }) => {
   const [toolNames, isValueArray]: [string[], boolean] = (() => {
     try {
-      if (Array.isArray(JSON.parse(thought.tool)))
-        return [JSON.parse(thought.tool), true]
-    }
-    catch (e) {
-    }
+      if (Array.isArray(JSON.parse(thought.tool))) return [JSON.parse(thought.tool), true]
+    } catch {}
     return [[thought.tool], false]
   })()
 
@@ -55,13 +37,9 @@ const Thought: FC<IThoughtProps> = ({
   })
 
   return (
-    <div className='my-2 space-y-2'>
+    <div className="my-2 space-y-2">
       {toolThoughtList.map((item: ToolInfoInThought, index) => (
-        <Tool
-          key={index}
-          payload={item}
-          allToolIcons={allToolIcons}
-        />
+        <ToolDetail key={index} payload={item} />
       ))}
     </div>
   )

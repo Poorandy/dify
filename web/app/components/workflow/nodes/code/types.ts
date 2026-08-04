@@ -1,4 +1,4 @@
-import type { CommonNodeType, VarType, Variable } from '@/app/components/workflow/types'
+import type { CommonNodeType, Variable, VarType } from '@/app/components/workflow/types'
 
 export enum CodeLanguage {
   python3 = 'python3',
@@ -6,20 +6,17 @@ export enum CodeLanguage {
   json = 'json',
 }
 
-export type OutputVar = Record<string, {
-  type: VarType
-  children: null // support nest in the future,
-}>
+export type OutputVar = Record<
+  string,
+  {
+    type: VarType
+    children: null // support nest in the future,
+  }
+>
 
 export type CodeNodeType = CommonNodeType & {
   variables: Variable[]
   code_language: CodeLanguage
   code: string
   outputs: OutputVar
-  dependencies?: CodeDependency[]
-}
-
-export type CodeDependency = {
-  name: string
-  version: string
 }

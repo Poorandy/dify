@@ -1,33 +1,25 @@
+import type { ReactElement } from 'react'
+import type { WorkflowCanvasShortcutId } from '../shortcuts/definitions'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@langgenius/dify-ui/tooltip'
 import { memo } from 'react'
-import ShortcutsName from '../shortcuts-name'
-import TooltipPlus from '@/app/components/base/tooltip-plus'
+import { ShortcutKbd } from '../shortcuts/shortcut-kbd'
 
 type TipPopupProps = {
   title: string
-  children: React.ReactNode
-  shortcuts?: string[]
+  children: ReactElement
+  shortcut?: WorkflowCanvasShortcutId
 }
-const TipPopup = ({
-  title,
-  children,
-  shortcuts,
-}: TipPopupProps) => {
+const TipPopup = ({ title, children, shortcut }: TipPopupProps) => {
   return (
-    <TooltipPlus
-      offset={4}
-      hideArrow
-      popupClassName='!p-0 !bg-gray-25'
-      popupContent={
-        <div className='flex items-center gap-1 px-2 h-6 text-xs font-medium text-gray-700 rounded-lg border-[0.5px] border-black/5'>
-          {title}
-          {
-            shortcuts && <ShortcutsName keys={shortcuts} className='!text-[11px]' />
-          }
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent sideOffset={4} className="max-w-none bg-transparent p-0 shadow-none">
+        <div className="flex items-center gap-1 rounded-lg border-[0.5px] border-components-panel-border bg-components-tooltip-bg p-1.5 shadow-lg backdrop-blur-[5px]">
+          <span className="system-xs-medium text-text-secondary">{title}</span>
+          {shortcut && <ShortcutKbd shortcut={shortcut} />}
         </div>
-      }
-    >
-      {children}
-    </TooltipPlus>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 

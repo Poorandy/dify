@@ -1,29 +1,17 @@
-import {
-  memo,
-  useCallback,
-  useMemo,
-  useState,
-} from 'react'
-import {
-  RiCloseLine,
-  RiHistoryLine,
-} from '@remixicon/react'
+import type { WorkflowHistoryState } from '../store/workflow/history-slice'
+import { Button } from '@langgenius/dify-ui/button'
+import { cn } from '@langgenius/dify-ui/cn'
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@langgenius/dify-ui/popover'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { useStoreApi } from 'reactflow'
-import {
-  useNodesReadOnly,
-  useWorkflowHistory,
-} from '../hooks'
-import TipPopup from '../operator/tip-popup'
-import type { WorkflowHistoryState } from '../workflow-history-store'
-import cn from '@/utils/classnames'
-import {
-  PortalToFollowElem,
-  PortalToFollowElemContent,
-  PortalToFollowElemTrigger,
-} from '@/app/components/base/portal-to-follow-elem'
 import { useStore as useAppStore } from '@/app/components/app/store'
+import Divider from '../../base/divider'
+import { collaborationManager } from '../collaboration/core/collaboration-manager'
+import { useCollaborativeWorkflow } from '../hooks/use-collaborative-workflow'
+import { useNodesReadOnly } from '../hooks/use-workflow'
+import { useWorkflowHistory } from '../hooks/use-workflow-history'
+import TipPopup from '../operator/tip-popup'
 
 type ChangeHistoryEntry = {
   label: string
@@ -42,12 +30,14 @@ const ViewWorkflowHistory = () => {
   const [open, setOpen] = useState(false)
 
   const { nodesReadOnly } = useNodesReadOnly()
-  const { setCurrentLogItem, setShowMessageLogModal } = useAppStore(useShallow(state => ({
-    appDetail: state.appDetail,
-    setCurrentLogItem: state.setCurrentLogItem,
-    setShowMessageLogModal: state.setShowMessageLogModal,
-  })))
-  const reactflowStore = useStoreApi()
+  const { setCurrentLogItem, setShowMessageLogModal } = useAppStore(
+    useShallow((state) => ({
+      appDetail: state.appDetail,
+      setCurrentLogItem: state.setCurrentLogItem,
+      setShowMessageLogModal: state.setShowMessageLogModal,
+    })),
+  )
+  const collaborativeWorkflow = useCollaborativeWorkflow()
   const { store, getHistoryLabel } = useWorkflowHistory()
 
   const { pastStates, futureStates, undo, redo, clear } = store.temporal.getState()
@@ -58,46 +48,76 @@ const ViewWorkflowHistory = () => {
     setCurrentHistoryStateIndex(0)
   }, [clear])
 
-  const handleSetState = useCallback(({ index }: ChangeHistoryEntry) => {
-    const { setEdges, setNodes } = reactflowStore.getState()
-    const diff = currentHistoryStateIndex + index
-    if (diff === 0)
-      return
+  const handleSetState = useCallback(
+    ({ index }: ChangeHistoryEntry) => {
+      const diff = currentHistoryStateIndex + index
+      if (diff === 0) return
 
-    if (diff < 0)
-      undo(diff * -1)
-    else
-      redo(diff)
+      if (diff < 0) undo(diff * -1)
+      else redo(diff)
 
-    const { edges, nodes } = store.getState()
-    if (edges.length === 0 && nodes.length === 0)
-      return
+      const { edges, nodes } = store.getState()
+      if (edges.length === 0 && nodes.length === 0) return
 
-    setEdges(edges)
-    setNodes(nodes)
-  }, [currentHistoryStateIndex, reactflowStore, redo, store, undo])
+      const shouldBroadcast = collaborationManager.isConnected()
+      const { setEdges, setNodes } = collaborativeWorkflow.getState()
+      setEdges(edges, shouldBroadcast)
+      setNodes(nodes, shouldBroadcast, 'history:jump')
+      if (collaborationManager.isConnected()) collaborationManager.emitHistoryAction('jump')
+    },
+    [collaborativeWorkflow, currentHistoryStateIndex, redo, store, undo],
+  )
 
-  const calculateStepLabel = useCallback((index: number) => {
-    if (!index)
-      return
+  const calculateStepLabel = useCallback(
+    (index: number) => {
+      if (!index) return
 
-    const count = index < 0 ? index * -1 : index
-    return `${index > 0 ? t('workflow.changeHistory.stepForward', { count }) : t('workflow.changeHistory.stepBackward', { count })}`
-  }
-  , [t])
+      const count = index < 0 ? index * -1 : index
+      return `${index > 0 ? t(($) => $['changeHistory.stepForward'], { ns: 'workflow', count }) : t(($) => $['changeHistory.stepBackward'], { ns: 'workflow', count })}`
+    },
+    [t],
+  )
 
   const calculateChangeList: ChangeHistoryList = useMemo(() => {
-    const filterList = (list: any, startIndex = 0, reverse = false) => list.map((state: Partial<WorkflowHistoryState>, index: number) => {
-      return {
-        label: state.workflowHistoryEvent && getHistoryLabel(state.workflowHistoryEvent),
-        index: reverse ? list.length - 1 - index - startIndex : index - startIndex,
-        state,
-      }
-    }).filter(Boolean)
+    const filterList = (
+      list: Array<Partial<WorkflowHistoryState> | undefined>,
+      startIndex = 0,
+      reverse = false,
+    ) =>
+      list.flatMap((state, index) => {
+        if (!state) return []
+
+        const nodes = state.nodes || store.getState().nodes || []
+        const nodeId = state.workflowHistoryEventMeta?.nodeId
+        const targetTitle = nodes.find((n) => n.id === nodeId)?.data?.title ?? ''
+
+        return [
+          {
+            label: state.workflowHistoryEvent ? getHistoryLabel(state.workflowHistoryEvent) : '',
+            index: reverse ? list.length - 1 - index - startIndex : index - startIndex,
+            state: {
+              ...state,
+              workflowHistoryEventMeta: state.workflowHistoryEventMeta
+                ? {
+                    ...state.workflowHistoryEventMeta,
+                    nodeTitle: state.workflowHistoryEventMeta.nodeTitle || targetTitle,
+                  }
+                : undefined,
+            },
+          },
+        ]
+      })
 
     const historyData = {
       pastStates: filterList(pastStates, pastStates.length).reverse(),
-      futureStates: filterList([...futureStates, (!pastStates.length && !futureStates.length) ? undefined : store.getState()].filter(Boolean), 0, true),
+      futureStates: filterList(
+        [
+          ...futureStates,
+          !pastStates.length && !futureStates.length ? undefined : store.getState(),
+        ].filter(Boolean),
+        0,
+        true,
+      ),
       statesCount: 0,
     }
 
@@ -109,164 +129,194 @@ const ViewWorkflowHistory = () => {
     }
   }, [futureStates, getHistoryLabel, pastStates, store])
 
+  const composeHistoryItemLabel = useCallback(
+    (nodeTitle: string | undefined, baseLabel: string) => {
+      if (!nodeTitle) return baseLabel
+      return `${nodeTitle} ${baseLabel}`
+    },
+    [],
+  )
+
   return (
-    (
-      <PortalToFollowElem
-        placement='bottom-end'
-        offset={{
-          mainAxis: 4,
-          crossAxis: 131,
-        }}
-        open={open}
-        onOpenChange={setOpen}
-      >
-        <PortalToFollowElemTrigger onClick={() => !nodesReadOnly && setOpen(v => !v)}>
-          <TipPopup
-            title={t('workflow.changeHistory.title')}
-          >
-            <div
-              className={`
-                flex items-center justify-center w-8 h-8 rounded-md hover:bg-black/5 cursor-pointer
-                ${open && 'bg-primary-50'} ${nodesReadOnly && 'bg-primary-50 opacity-50 !cursor-not-allowed'}
-              `}
+    <Popover
+      modal="trap-focus"
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nodesReadOnly) return
+        setOpen(nextOpen)
+      }}
+    >
+      <TipPopup title={t(($) => $['changeHistory.title'], { ns: 'workflow' })}>
+        {/* Tooltip and Popover share data-popup-open on this button, so read Popover state directly. */}
+        <PopoverTrigger
+          className={({ open: popoverOpen }) =>
+            cn(
+              popoverOpen &&
+                'bg-state-accent-active text-text-accent hover:bg-state-accent-active hover:text-text-accent',
+            )
+          }
+          render={
+            <Button
+              variant="ghost"
+              size="small"
+              disabled={nodesReadOnly}
+              focusableWhenDisabled
+              aria-label={t(($) => $['changeHistory.title'], { ns: 'workflow' })}
+              className={cn(
+                'size-8 p-0 text-text-tertiary hover:bg-state-base-hover hover:text-text-secondary',
+                'data-disabled:cursor-not-allowed data-disabled:text-text-disabled data-disabled:hover:bg-transparent data-disabled:hover:text-text-disabled',
+              )}
               onClick={() => {
-                if (nodesReadOnly)
-                  return
+                if (nodesReadOnly) return
                 setCurrentLogItem()
                 setShowMessageLogModal(false)
               }}
-            >
-              <RiHistoryLine className={`w-4 h-4 hover:bg-black/5 hover:text-gray-700 ${open ? 'text-primary-600' : 'text-gray-500'}`} />
+            />
+          }
+        >
+          <span aria-hidden className="i-ri-history-line size-4 shrink-0" />
+        </PopoverTrigger>
+      </TipPopup>
+      <PopoverContent
+        placement="bottom-end"
+        popupClassName="border-none bg-transparent shadow-none"
+      >
+        <div className="flex max-w-90 min-w-60 flex-col overflow-y-auto rounded-xl border-[0.5px] border-components-panel-border bg-components-panel-bg-blur shadow-xl backdrop-blur-[5px]">
+          <div className="sticky top-0 flex items-center justify-between px-4 pt-3">
+            <div className="system-mg-regular grow text-text-secondary">
+              {t(($) => $['changeHistory.title'], { ns: 'workflow' })}
             </div>
-          </TipPopup>
-        </PortalToFollowElemTrigger>
-        <PortalToFollowElemContent className='z-[12]'>
+            <PopoverClose
+              render={
+                <Button
+                  variant="ghost"
+                  size="small"
+                  aria-label={t(($) => $['operation.close'], { ns: 'common' })}
+                  className="size-6 shrink-0 p-0 text-text-secondary hover:bg-state-base-hover"
+                >
+                  <span aria-hidden className="i-ri-close-line size-4 text-text-secondary" />
+                </Button>
+              }
+              onClick={() => {
+                setCurrentLogItem()
+                setShowMessageLogModal(false)
+              }}
+            />
+          </div>
           <div
-            className='flex flex-col ml-2 min-w-[240px] max-w-[360px] bg-white border-[0.5px] border-gray-200 shadow-xl rounded-xl overflow-y-auto'
+            className="overflow-y-auto p-2"
+            style={{
+              maxHeight: 'calc(1 / 2 * 100vh)',
+            }}
           >
-            <div className='sticky top-0 bg-white flex items-center justify-between px-4 pt-3 text-base font-semibold text-gray-900'>
-              <div className='grow'>{t('workflow.changeHistory.title')}</div>
-              <div
-                className='shrink-0 flex items-center justify-center w-6 h-6 cursor-pointer'
+            {!calculateChangeList.statesCount && (
+              <div className="py-12">
+                <span
+                  aria-hidden
+                  className="mx-auto mb-2 i-ri-history-line block size-8 text-text-tertiary"
+                />
+                <div className="text-center text-[13px] text-text-tertiary">
+                  {t(($) => $['changeHistory.placeholder'], { ns: 'workflow' })}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col">
+              {calculateChangeList.futureStates.map((item: ChangeHistoryEntry) => (
+                <button
+                  type="button"
+                  key={item?.index}
+                  className={cn(
+                    'mb-0.5 flex w-full cursor-pointer rounded-lg px-2 py-1.75 text-left text-text-secondary hover:bg-state-base-hover',
+                    item?.index === currentHistoryStateIndex && 'bg-state-base-hover',
+                  )}
+                  onClick={() => {
+                    handleSetState(item)
+                    setOpen(false)
+                  }}
+                >
+                  <div>
+                    <div
+                      className={cn(
+                        'flex items-center text-[13px] leading-4.5 font-medium text-text-secondary',
+                      )}
+                    >
+                      {composeHistoryItemLabel(
+                        item?.state?.workflowHistoryEventMeta?.nodeTitle,
+                        item?.label ||
+                          t(($) => $['changeHistory.sessionStart'], { ns: 'workflow' }),
+                      )}{' '}
+                      ({calculateStepLabel(item?.index)}
+                      {item?.index === currentHistoryStateIndex &&
+                        t(($) => $['changeHistory.currentState'], { ns: 'workflow' })}
+                      )
+                    </div>
+                  </div>
+                </button>
+              ))}
+              {calculateChangeList.pastStates.map((item: ChangeHistoryEntry) => (
+                <button
+                  type="button"
+                  key={item?.index}
+                  className={cn(
+                    'mb-0.5 flex w-full cursor-pointer rounded-lg px-2 py-1.75 text-left hover:bg-state-base-hover',
+                    item?.index === calculateChangeList.statesCount - 1 && 'bg-state-base-hover',
+                  )}
+                  onClick={() => {
+                    handleSetState(item)
+                    setOpen(false)
+                  }}
+                >
+                  <div>
+                    <div
+                      className={cn(
+                        'flex items-center text-[13px] leading-4.5 font-medium text-text-secondary',
+                      )}
+                    >
+                      {composeHistoryItemLabel(
+                        item?.state?.workflowHistoryEventMeta?.nodeTitle,
+                        item?.label ||
+                          t(($) => $['changeHistory.sessionStart'], { ns: 'workflow' }),
+                      )}{' '}
+                      ({calculateStepLabel(item?.index)})
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          {!!calculateChangeList.statesCount && (
+            <div className="px-0.5">
+              <Divider className="m-0" />
+              <button
+                type="button"
+                className={cn(
+                  'my-0.5 flex w-full cursor-pointer rounded-lg px-2 py-1.75 text-left text-text-secondary',
+                  'hover:bg-state-base-hover',
+                )}
                 onClick={() => {
-                  setCurrentLogItem()
-                  setShowMessageLogModal(false)
+                  handleClearHistory()
                   setOpen(false)
                 }}
               >
-                <RiCloseLine className='w-4 h-4 text-gray-500' />
-              </div>
-            </div>
-            {
-              (
-                <div
-                  className='p-2 overflow-y-auto'
-                  style={{
-                    maxHeight: 'calc(1 / 2 * 100vh)',
-                  }}
-                >
-                  {
-                    !calculateChangeList.statesCount && (
-                      <div className='py-12'>
-                        <RiHistoryLine className='mx-auto mb-2 w-8 h-8 text-gray-300' />
-                        <div className='text-center text-[13px] text-gray-400'>
-                          {t('workflow.changeHistory.placeholder')}
-                        </div>
-                      </div>
-                    )
-                  }
-                  <div className='flex flex-col'>
-                    {
-                      calculateChangeList.futureStates.map((item: ChangeHistoryEntry) => (
-                        <div
-                          key={item?.index}
-                          className={cn(
-                            'flex mb-0.5 px-2 py-[7px] rounded-lg hover:bg-primary-50 cursor-pointer',
-                            item?.index === currentHistoryStateIndex && 'bg-primary-50',
-                          )}
-                          onClick={() => {
-                            handleSetState(item)
-                            setOpen(false)
-                          }}
-                        >
-                          <div>
-                            <div
-                              className={cn(
-                                'flex items-center text-[13px] font-medium leading-[18px]',
-                                item?.index === currentHistoryStateIndex && 'text-primary-600',
-                              )}
-                            >
-                              {item?.label || t('workflow.changeHistory.sessionStart')} ({calculateStepLabel(item?.index)}{item?.index === currentHistoryStateIndex && t('workflow.changeHistory.currentState')})
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    }
-                    {
-                      calculateChangeList.pastStates.map((item: ChangeHistoryEntry) => (
-                        <div
-                          key={item?.index}
-                          className={cn(
-                            'flex mb-0.5 px-2 py-[7px] rounded-lg hover:bg-primary-50 cursor-pointer',
-                            item?.index === calculateChangeList.statesCount - 1 && 'bg-primary-50',
-                          )}
-                          onClick={() => {
-                            handleSetState(item)
-                            setOpen(false)
-                          }}
-                        >
-                          <div>
-                            <div
-                              className={cn(
-                                'flex items-center text-[13px] font-medium leading-[18px]',
-                                item?.index === calculateChangeList.statesCount - 1 && 'text-primary-600',
-                              )}
-                            >
-                              {item?.label || t('workflow.changeHistory.sessionStart')} ({calculateStepLabel(item?.index)})
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    }
+                <div>
+                  <div className={cn('flex items-center text-[13px] leading-4.5 font-medium')}>
+                    {t(($) => $['changeHistory.clearHistory'], { ns: 'workflow' })}
                   </div>
                 </div>
-              )
-            }
-            {
-              !!calculateChangeList.statesCount && (
-                <>
-                  <div className="h-[1px] bg-gray-100" />
-                  <div
-                    className={cn(
-                      'flex my-0.5 px-2 py-[7px] rounded-lg cursor-pointer',
-                      'hover:bg-red-50 hover:text-red-600',
-                    )}
-                    onClick={() => {
-                      handleClearHistory()
-                      setOpen(false)
-                    }}
-                  >
-                    <div>
-                      <div
-                        className={cn(
-                          'flex items-center text-[13px] font-medium leading-[18px]',
-                        )}
-                      >
-                        {t('workflow.changeHistory.clearHistory')}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )
-            }
-            <div className="px-3 w-[240px] py-2 text-xs text-gray-500" >
-              <div className="flex items-center mb-1 h-[22px] font-medium uppercase">{t('workflow.changeHistory.hint')}</div>
-              <div className="mb-1 text-gray-700 leading-[18px]">{t('workflow.changeHistory.hintText')}</div>
+              </button>
+            </div>
+          )}
+          <div className="w-60 px-3 py-2 text-xs text-text-tertiary">
+            <div className="mb-1 flex h-5.5 items-center font-medium uppercase">
+              {t(($) => $['changeHistory.hint'], { ns: 'workflow' })}
+            </div>
+            <div className="mb-1 leading-4.5 text-text-tertiary">
+              {t(($) => $['changeHistory.hintText'], { ns: 'workflow' })}
             </div>
           </div>
-        </PortalToFollowElemContent>
-      </PortalToFollowElem>
-    )
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 

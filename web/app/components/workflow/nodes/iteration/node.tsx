@@ -1,47 +1,47 @@
 import type { FC } from 'react'
-import {
-  memo,
-  useEffect,
-} from 'react'
-import {
-  Background,
-  useNodesInitialized,
-  useViewport,
-} from 'reactflow'
-import { useNodeIterationInteractions } from './use-interactions'
 import type { IterationNodeType } from './types'
-import AddBlock from './add-block'
-import cn from '@/utils/classnames'
 import type { NodeProps } from '@/app/components/workflow/types'
+import { cn } from '@langgenius/dify-ui/cn'
+import { toast } from '@langgenius/dify-ui/toast'
+import { memo, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Background, useNodesInitialized, useViewport } from 'reactflow'
+import { IterationStartNodeDumb } from '../iteration-start'
+import AddBlock from './add-block'
+import { useNodeIterationInteractions } from './use-interactions'
 
-const Node: FC<NodeProps<IterationNodeType>> = ({
-  id,
-  data,
-}) => {
+const i18nPrefix = 'nodes.iteration'
+
+const Node: FC<NodeProps<IterationNodeType>> = ({ id, data }) => {
   const { zoom } = useViewport()
   const nodesInitialized = useNodesInitialized()
   const { handleNodeIterationRerender } = useNodeIterationInteractions()
+  const { t } = useTranslation()
+  const [showTips, setShowTips] = useState(data._isShowTips)
 
   useEffect(() => {
-    if (nodesInitialized)
-      handleNodeIterationRerender(id)
-  }, [nodesInitialized, id, handleNodeIterationRerender])
+    if (nodesInitialized) handleNodeIterationRerender(id)
+    if (data.is_parallel && showTips) {
+      toast.warning(t(($) => $[`${i18nPrefix}.answerNodeWarningDesc`], { ns: 'workflow' }))
+      setShowTips(false)
+    }
+  }, [nodesInitialized, id, handleNodeIterationRerender, data.is_parallel, showTips, t])
 
   return (
-    <div className={cn(
-      'relative min-w-[258px] min-h-[118px] w-full h-full rounded-2xl bg-[#F0F2F7]/90',
-    )}>
+    <div
+      className={cn(
+        'relative h-full min-h-22.5 w-full min-w-60 rounded-2xl bg-workflow-canvas-workflow-bg',
+      )}
+    >
       <Background
         id={`iteration-background-${id}`}
-        className='rounded-2xl !z-0'
+        className="z-0! rounded-2xl"
         gap={[14 / zoom, 14 / zoom]}
         size={2 / zoom}
-        color='#E4E5E7'
+        color="var(--color-workflow-canvas-workflow-dot-color)"
       />
-      <AddBlock
-        iterationNodeId={id}
-        iterationNodeData={data}
-      />
+      {data._isCandidate && <IterationStartNodeDumb />}
+      {data._children?.length === 1 && <AddBlock iterationNodeId={id} iterationNodeData={data} />}
     </div>
   )
 }

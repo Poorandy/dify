@@ -1,19 +1,18 @@
 import type { FC, ReactNode } from 'react'
-import classNames from '@/utils/classnames'
+import { cn } from '@langgenius/dify-ui/cn'
 
 type ModelBadgeProps = {
   className?: string
   children?: ReactNode
 }
-const ModelBadge: FC<ModelBadgeProps> = ({
-  className,
-  children,
-}) => {
+const ModelBadge: FC<ModelBadgeProps> = ({ className, children }) => {
   return (
-    <div className={classNames(
-      'flex items-center px-1 h-[18px] rounded-[5px] border border-black/8 bg-white/[0.48] text-[10px] font-medium text-gray-500 cursor-default',
-      className,
-    )}>
+    <div
+      className={cn(
+        'inline-flex h-4.5 shrink-0 items-center justify-center rounded-[5px] border border-divider-deep bg-components-badge-bg-dimm px-1.25 system-2xs-medium-uppercase whitespace-nowrap text-text-tertiary',
+        className,
+      )}
+    >
       {children}
     </div>
   )

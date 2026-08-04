@@ -1,51 +1,56 @@
-from enum import Enum
+from enum import StrEnum
 
-from pydantic import BaseModel, ValidationInfo, field_validator
+from pydantic import BaseModel
+
+from core.ops.utils import validate_project_name, validate_url
 
 
-class TracingProviderEnum(Enum):
-    LANGFUSE = 'langfuse'
-    LANGSMITH = 'langsmith'
+class TracingProviderEnum(StrEnum):
+    ARIZE = "arize"
+    PHOENIX = "phoenix"
+    LANGFUSE = "langfuse"
+    LANGSMITH = "langsmith"
+    OPIK = "opik"
+    WEAVE = "weave"
+    ALIYUN = "aliyun"
+    MLFLOW = "mlflow"
+    DATABRICKS = "databricks"
+    TENCENT = "tencent"
 
 
 class BaseTracingConfig(BaseModel):
     """
-    Base model class for tracing
+    Base model class for tracing configurations
     """
-    ...
+
+    @classmethod
+    def validate_endpoint_url(cls, v: str, default_url: str) -> str:
+        """
+        Common endpoint URL validation logic
+
+        Args:
+            v: URL value to validate
+            default_url: Default URL to use if input is None or empty
+
+        Returns:
+            Validated and normalized URL
+        """
+        return validate_url(v, default_url)
+
+    @classmethod
+    def validate_project_field(cls, v: str, default_name: str) -> str:
+        """
+        Common project name validation logic
+
+        Args:
+            v: Project name to validate
+            default_name: Default name to use if input is None or empty
+
+        Returns:
+            Validated project name
+        """
+        return validate_project_name(v, default_name)
 
 
-class LangfuseConfig(BaseTracingConfig):
-    """
-    Model class for Langfuse tracing config.
-    """
-    public_key: str
-    secret_key: str
-    host: str = 'https://api.langfuse.com'
-
-    @field_validator("host")
-    def set_value(cls, v, info: ValidationInfo):
-        if v is None or v == "":
-            v = 'https://api.langfuse.com'
-        if not v.startswith('https://') and not v.startswith('http://'):
-            raise ValueError('host must start with https:// or http://')
-
-        return v
-
-
-class LangSmithConfig(BaseTracingConfig):
-    """
-    Model class for Langsmith tracing config.
-    """
-    api_key: str
-    project: str
-    endpoint: str = 'https://api.smith.langchain.com'
-
-    @field_validator("endpoint")
-    def set_value(cls, v, info: ValidationInfo):
-        if v is None or v == "":
-            v = 'https://api.smith.langchain.com'
-        if not v.startswith('https://'):
-            raise ValueError('endpoint must start with https://')
-
-        return v
+OPS_FILE_PATH = "ops_trace/"
+OPS_TRACE_FAILED_KEY = "FAILED_OPS_TRACE"

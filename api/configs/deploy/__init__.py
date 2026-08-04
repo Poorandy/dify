@@ -1,27 +1,36 @@
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
 class DeploymentConfig(BaseSettings):
     """
-    Deployment configs
+    Configuration settings for application deployment
     """
+
     APPLICATION_NAME: str = Field(
-        description='application name',
-        default='langgenius/dify',
+        description="Name of the application, used for identification and logging purposes",
+        default="langgenius/dify",
     )
 
-    TESTING: bool = Field(
-        description='',
+    DEBUG: bool = Field(
+        description="Enable debug mode for additional logging and development features",
         default=False,
     )
 
-    EDITION: str = Field(
-        description='deployment edition',
-        default='SELF_HOSTED',
+    # Request logging configuration
+    ENABLE_REQUEST_LOGGING: bool = Field(
+        description="Enable request and response body logging",
+        default=False,
+    )
+
+    EDITION: Literal["SELF_HOSTED", "CLOUD"] = Field(
+        description="Deployment edition of the application (e.g., 'SELF_HOSTED', 'CLOUD')",
+        default="SELF_HOSTED",
     )
 
     DEPLOY_ENV: str = Field(
-        description='deployment environment, default to PRODUCTION.',
-        default='PRODUCTION',
+        description="Deployment environment (e.g., 'PRODUCTION', 'DEVELOPMENT'), default to PRODUCTION",
+        default="PRODUCTION",
     )

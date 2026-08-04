@@ -1,245 +1,162 @@
 'use client'
 import type { FC } from 'react'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useContext } from 'use-context-selector'
+import type { WorkflowRunDetailResponse } from '@/models/log'
+import type { NodeTracing } from '@/types/workflow'
+import { cn } from '@langgenius/dify-ui/cn'
+import { toast } from '@langgenius/dify-ui/toast'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useBoolean } from 'ahooks'
-import { BlockEnum } from '../types'
+import Loading from '@/app/components/base/loading'
+import { WorkflowRunningStatus } from '@/app/components/workflow/types'
+import { fetchRunDetail, fetchTracingList } from '@/service/log'
+import { useStore } from '../store'
 import OutputPanel from './output-panel'
 import ResultPanel from './result-panel'
+import StatusPanel from './status'
 import TracingPanel from './tracing-panel'
-import IterationResultPanel from './iteration-result-panel'
-import cn from '@/utils/classnames'
-import { ToastContext } from '@/app/components/base/toast'
-import Loading from '@/app/components/base/loading'
-import { fetchRunDetail, fetchTracingList } from '@/service/log'
-import type { NodeTracing } from '@/types/workflow'
-import type { WorkflowRunDetailResponse } from '@/models/log'
-import { useStore as useAppStore } from '@/app/components/app/store'
 
-export type RunProps = {
+type RunProps = {
   hideResult?: boolean
   activeTab?: 'RESULT' | 'DETAIL' | 'TRACING'
-  runID: string
   getResultCallback?: (result: WorkflowRunDetailResponse) => void
-  onShowIterationDetail: (detail: NodeTracing[][]) => void
+  runDetailUrl: string
+  tracingListUrl: string
 }
 
-const RunPanel: FC<RunProps> = ({ hideResult, activeTab = 'RESULT', runID, getResultCallback, onShowIterationDetail }) => {
+const RunPanel: FC<RunProps> = ({
+  hideResult,
+  activeTab = 'RESULT',
+  getResultCallback,
+  runDetailUrl,
+  tracingListUrl,
+}) => {
   const { t } = useTranslation()
-  const { notify } = useContext(ToastContext)
   const [currentTab, setCurrentTab] = useState<string>(activeTab)
-  const appDetail = useAppStore(state => state.appDetail)
   const [loading, setLoading] = useState<boolean>(true)
   const [runDetail, setRunDetail] = useState<WorkflowRunDetailResponse>()
   const [list, setList] = useState<NodeTracing[]>([])
+  const isListening = useStore((s) => s.isListening)
 
   const executor = useMemo(() => {
-    if (runDetail?.created_by_role === 'account')
-      return runDetail.created_by_account?.name || ''
+    if (runDetail?.created_by_role === 'account') return runDetail.created_by_account?.name || ''
     if (runDetail?.created_by_role === 'end_user')
       return runDetail.created_by_end_user?.session_id || ''
     return 'N/A'
   }, [runDetail])
 
-  const getResult = useCallback(async (appID: string, runID: string) => {
+  const getResult = useCallback(async () => {
     try {
-      const res = await fetchRunDetail({
-        appID,
-        runID,
-      })
+      const res = await fetchRunDetail(runDetailUrl)
       setRunDetail(res)
-      if (getResultCallback)
-        getResultCallback(res)
+      if (getResultCallback) getResultCallback(res)
+    } catch (err) {
+      toast.error(`${err}`)
     }
-    catch (err) {
-      notify({
-        type: 'error',
-        message: `${err}`,
-      })
-    }
-  }, [notify, getResultCallback])
+  }, [getResultCallback, runDetailUrl])
 
-  const formatNodeList = useCallback((list: NodeTracing[]) => {
-    const allItems = list.reverse()
-    const result: NodeTracing[] = []
-    let iterationIndexInfos: {
-      start: number
-      end: number
-    }[] = []
-    allItems.forEach((item) => {
-      const { node_type, index, execution_metadata } = item
-      if (node_type !== BlockEnum.Iteration) {
-        let isInIteration = false
-        let isIterationFirstNode = false
-        iterationIndexInfos.forEach(({ start, end }) => {
-          if (index >= start && index < end) {
-            if (index === start)
-              isIterationFirstNode = true
-
-            isInIteration = true
-          }
-        })
-        if (isInIteration) {
-          const iterationDetails = result[result.length - 1].details!
-          if (isIterationFirstNode)
-            iterationDetails!.push([item])
-
-          else
-            iterationDetails[iterationDetails.length - 1].push(item)
-
-          return
-        }
-        // not in iteration
-        result.push(item)
-
-        return
-      }
-
-      const { steps_boundary } = execution_metadata
-      iterationIndexInfos = []
-      steps_boundary.forEach((boundary, index) => {
-        if (index === 0) {
-          iterationIndexInfos.push({
-            start: boundary,
-            end: 0,
-          })
-        }
-        else if (index === steps_boundary.length - 1) {
-          iterationIndexInfos[iterationIndexInfos.length - 1].end = boundary
-        }
-        else {
-          iterationIndexInfos[iterationIndexInfos.length - 1].end = boundary
-          iterationIndexInfos.push({
-            start: boundary,
-            end: 0,
-          })
-        }
-      })
-      result.push({
-        ...item,
-        details: [],
-      })
-    })
-    return result
-  }, [])
-
-  const getTracingList = useCallback(async (appID: string, runID: string) => {
+  const getTracingList = useCallback(async () => {
     try {
       const { data: nodeList } = await fetchTracingList({
-        url: `/apps/${appID}/workflow-runs/${runID}/node-executions`,
+        url: tracingListUrl,
       })
-      setList(formatNodeList(nodeList))
+      setList(nodeList)
+    } catch (err) {
+      toast.error(`${err}`)
     }
-    catch (err) {
-      notify({
-        type: 'error',
-        message: `${err}`,
-      })
-    }
-  }, [notify])
+  }, [tracingListUrl])
 
-  const getData = async (appID: string, runID: string) => {
+  const getData = useCallback(async () => {
     setLoading(true)
-    await getResult(appID, runID)
-    await getTracingList(appID, runID)
+    await getResult()
+    await getTracingList()
     setLoading(false)
-  }
+  }, [getResult, getTracingList])
 
   const switchTab = async (tab: string) => {
     setCurrentTab(tab)
-    if (tab === 'RESULT')
-      appDetail?.id && await getResult(appDetail.id, runID)
-    appDetail?.id && await getTracingList(appDetail.id, runID)
+    if (tab === 'RESULT') {
+      if (runDetailUrl) await getResult()
+    }
+    if (tracingListUrl) await getTracingList()
   }
 
   useEffect(() => {
-    // fetch data
-    if (appDetail && runID)
-      getData(appDetail.id, runID)
-  }, [appDetail, runID])
+    if (isListening) setCurrentTab('DETAIL')
+  }, [isListening])
 
-  const [height, setHieght] = useState(0)
+  useEffect(() => {
+    // fetch data
+    if (runDetailUrl && tracingListUrl) getData()
+  }, [runDetailUrl, tracingListUrl])
+
+  const [height, setHeight] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
 
   const adjustResultHeight = () => {
-    if (ref.current)
-      setHieght(ref.current?.clientHeight - 16 - 16 - 2 - 1)
+    if (ref.current) setHeight(ref.current?.clientHeight - 16 - 16 - 2 - 1)
   }
 
   useEffect(() => {
     adjustResultHeight()
   }, [loading])
 
-  const [iterationRunResult, setIterationRunResult] = useState<NodeTracing[][]>([])
-  const [isShowIterationDetail, {
-    setTrue: doShowIterationDetail,
-    setFalse: doHideIterationDetail,
-  }] = useBoolean(false)
-
-  const handleShowIterationDetail = useCallback((detail: NodeTracing[][]) => {
-    setIterationRunResult(detail)
-    doShowIterationDetail()
-  }, [doShowIterationDetail])
-
-  if (isShowIterationDetail) {
-    return (
-      <div className='grow relative flex flex-col'>
-        <IterationResultPanel
-          list={iterationRunResult}
-          onHide={doHideIterationDetail}
-          onBack={doHideIterationDetail}
-        />
-      </div>
-    )
-  }
-
   return (
-    <div className='grow relative flex flex-col'>
+    <div className="relative flex grow flex-col">
       {/* tab */}
-      <div className='shrink-0 flex items-center px-4 border-b-[0.5px] border-[rgba(0,0,0,0.05)]'>
+      <div className="flex shrink-0 items-center border-b-[0.5px] border-divider-subtle px-4">
         {!hideResult && (
           <div
             className={cn(
-              'mr-6 py-3 border-b-2 border-transparent text-[13px] font-semibold leading-[18px] text-gray-400 cursor-pointer',
-              currentTab === 'RESULT' && '!border-[rgb(21,94,239)] text-gray-700',
+              'mr-6 cursor-pointer border-b-2 border-transparent py-3 system-sm-semibold-uppercase text-text-tertiary',
+              currentTab === 'RESULT' &&
+                'border-util-colors-blue-brand-blue-brand-600! text-text-primary',
             )}
             onClick={() => switchTab('RESULT')}
-          >{t('runLog.result')}</div>
+          >
+            {t(($) => $.result, { ns: 'runLog' })}
+          </div>
         )}
         <div
           className={cn(
-            'mr-6 py-3 border-b-2 border-transparent text-[13px] font-semibold leading-[18px] text-gray-400 cursor-pointer',
-            currentTab === 'DETAIL' && '!border-[rgb(21,94,239)] text-gray-700',
+            'mr-6 cursor-pointer border-b-2 border-transparent py-3 system-sm-semibold-uppercase text-text-tertiary',
+            currentTab === 'DETAIL' &&
+              'border-util-colors-blue-brand-blue-brand-600! text-text-primary',
           )}
           onClick={() => switchTab('DETAIL')}
-        >{t('runLog.detail')}</div>
+        >
+          {t(($) => $.detail, { ns: 'runLog' })}
+        </div>
         <div
           className={cn(
-            'mr-6 py-3 border-b-2 border-transparent text-[13px] font-semibold leading-[18px] text-gray-400 cursor-pointer',
-            currentTab === 'TRACING' && '!border-[rgb(21,94,239)] text-gray-700',
+            'mr-6 cursor-pointer border-b-2 border-transparent py-3 system-sm-semibold-uppercase text-text-tertiary',
+            currentTab === 'TRACING' &&
+              'border-util-colors-blue-brand-blue-brand-600! text-text-primary',
           )}
           onClick={() => switchTab('TRACING')}
-        >{t('runLog.tracing')}</div>
+        >
+          {t(($) => $.tracing, { ns: 'runLog' })}
+        </div>
       </div>
-      {/* panel detal */}
-      <div ref={ref} className={cn('grow bg-white h-0 overflow-y-auto rounded-b-2xl', currentTab !== 'DETAIL' && '!bg-gray-50')}>
+      {/* panel detail */}
+      <div
+        ref={ref}
+        className={cn('relative h-0 grow overflow-y-auto rounded-b-xl bg-components-panel-bg')}
+      >
         {loading && (
-          <div className='flex h-full items-center justify-center bg-white'>
+          <div className="flex h-full items-center justify-center bg-components-panel-bg">
             <Loading />
           </div>
         )}
         {!loading && currentTab === 'RESULT' && runDetail && (
-          <OutputPanel
-            outputs={runDetail.outputs}
-            error={runDetail.error}
-            height={height}
-          />
+          <OutputPanel outputs={runDetail.outputs} error={runDetail.error} height={height} />
         )}
         {!loading && currentTab === 'DETAIL' && runDetail && (
           <ResultPanel
             inputs={runDetail.inputs}
+            inputs_truncated={runDetail.inputs_truncated}
             outputs={runDetail.outputs}
+            outputs_truncated={runDetail.outputs_truncated}
+            outputs_full_content={runDetail.outputs_full_content}
             status={runDetail.status}
             error={runDetail.error}
             elapsed_time={runDetail.elapsed_time}
@@ -247,13 +164,17 @@ const RunPanel: FC<RunProps> = ({ hideResult, activeTab = 'RESULT', runID, getRe
             created_at={runDetail.created_at}
             created_by={executor}
             steps={runDetail.total_steps}
+            exceptionCounts={runDetail.exceptions_count}
+            isListening={isListening}
+            workflowRunId={runDetail.id}
+            onOpenTracingTab={() => switchTab('TRACING')}
           />
         )}
+        {!loading && currentTab === 'DETAIL' && !runDetail && isListening && (
+          <StatusPanel status={WorkflowRunningStatus.Running} isListening={true} />
+        )}
         {!loading && currentTab === 'TRACING' && (
-          <TracingPanel
-            list={list}
-            onShowIterationDetail={handleShowIterationDetail}
-          />
+          <TracingPanel className="bg-background-section-burn" list={list} />
         )}
       </div>
     </div>

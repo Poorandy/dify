@@ -1,7 +1,7 @@
 from services.errors.base import BaseServiceError
 
 
-class AccountNotFound(BaseServiceError):
+class AccountNotFoundError(BaseServiceError):
     pass
 
 
@@ -10,6 +10,18 @@ class AccountRegisterError(BaseServiceError):
 
 
 class AccountLoginError(BaseServiceError):
+    pass
+
+
+class AccountPasswordError(BaseServiceError):
+    pass
+
+
+class RefreshTokenNotFoundError(BaseServiceError):
+    pass
+
+
+class RefreshTokenAccountNotFoundError(BaseServiceError):
     pass
 
 
@@ -25,11 +37,15 @@ class LinkAccountIntegrateError(BaseServiceError):
     pass
 
 
-class TenantNotFound(BaseServiceError):
+class TenantNotFoundError(BaseServiceError):
     pass
 
 
 class AccountAlreadyInTenantError(BaseServiceError):
+    pass
+
+
+class SeatsLimitExceededError(BaseServiceError):
     pass
 
 
@@ -51,8 +67,3 @@ class MemberNotInTenantError(BaseServiceError):
 
 class RoleAlreadyAssignedError(BaseServiceError):
     pass
-
-
-class RateLimitExceededError(BaseServiceError):
-    pass
-

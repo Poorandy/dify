@@ -1,16 +1,14 @@
 'use client'
 import type { FC } from 'react'
-import React from 'react'
+import * as React from 'react'
 
-type Props = {
+type Props = Readonly<{
   children: React.ReactNode
-}
+}>
 
-const ListNoDataPlaceholder: FC<Props> = ({
-  children,
-}) => {
+const ListNoDataPlaceholder: FC<Props> = ({ children }) => {
   return (
-    <div className='flex rounded-md bg-gray-50 items-center min-h-[42px] justify-center leading-[18px] text-xs font-normal text-gray-500'>
+    <div className="flex min-h-10.5 w-full items-center justify-center rounded-[10px] bg-background-section system-xs-regular text-text-tertiary">
       {children}
     </div>
   )
